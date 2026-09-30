@@ -24,17 +24,29 @@ These files are copied from [jev-shared](https://github.com/dgr8akki/jev-shared)
 - Upstream: https://github.com/dgr8akki/jev-shared
 - Commit: `0000000000000000000000000000000000000000`
 
-| Upstream path                    | Local path                | Note                                                     |
-| -------------------------------- | ------------------------- | -------------------------------------------------------- |
-| `shared/src/lib/jev.js`          | `src/lib/jev.js`          |                                                          |
-| `shared/src/lib/connection.js`   | `src/lib/connection.js`   | mounted with `{ primaryClass, secondaryClass }`          |
-| `shared/src/options/options.js`  | `src/options/options.js`  | icons from `<template data-icon>`, copy from `data-next` |
-| `shared/test/jev.test.js`        | `test/jev.test.js`        |                                                          |
-| `shared/test/helpers.js`         | `test/helpers.js`         |                                                          |
-| `shared/test/manifest-shared.js` | `test/manifest-shared.js` |                                                          |
-| `shared/scripts/render-icons.js` | `scripts/render-icons.js` |                                                          |
-| `scripts/sync-shared.js`         | `scripts/sync-shared.js`  | keeps itself in sync                                     |
+| Upstream path                    | Local path                | Note                                            |
+| -------------------------------- | ------------------------- | ----------------------------------------------- |
+| `shared/src/lib/jev.js`          | `src/lib/jev.js`          |                                                 |
+| `shared/src/lib/connection.js`   | `src/lib/connection.js`   | mounted with `{ primaryClass, secondaryClass }` |
+| `shared/src/options/options.js`  | `src/options/options.js`  | page contract below                             |
+| `shared/test/jev.test.js`        | `test/jev.test.js`        |                                                 |
+| `shared/test/helpers.js`         | `test/helpers.js`         |                                                 |
+| `shared/test/manifest-shared.js` | `test/manifest-shared.js` |                                                 |
+| `shared/scripts/render-icons.js` | `scripts/render-icons.js` |                                                 |
+| `scripts/sync-shared.js`         | `scripts/sync-shared.js`  | keeps itself in sync                            |
 ```
+
+## What `options.js` needs from its page
+
+The script is the same in all four repos; the HTML and CSS are not. A settings page that adopts it must have these ids: `key-form` (containing radios named `provider` and a `button[type="submit"]`), `api-key`, `cancel`, `connected`, `test`, `replace`, `remove`, `key-status`, `connected-status`, `steps`, `host`, `provider-label`, `masked`. `kicker` is optional and receives Welcome, Replace your key or Settings. Focus moves to `#test` after Connect, to `#replace` after Cancel and to `#api-key` after Remove, so those three must be focusable buttons and a field, not headings.
+
+On `<body>`: `data-next` is the sentence appended to "Key works." after connecting (for example "Reload LinkedIn to see labels."); `data-app` is the product name used in console errors, falling back to the page `<title>`. `body[data-state]` is set to `welcome`, `replace` or `connected` for CSS.
+
+Status lines get `data-tone` of `busy`, `ok`, `error` or `neutral`. A page can style those tones in CSS alone, or add `<template data-icon="busy|ok|error|neutral">` elements whose content is cloned in front of the text, so no state relies on colour. The busy mark is also cloned into the button while a check runs.
+
+## What `permission.js` needs from its page
+
+`#allow` (a button) and `#status` (a `role="status"` element). Once the microphone is granted, the script moves focus to `#status` and then disables the button, so a keyboard user is not left on `<body>`; it adds `tabindex="-1"` to `#status` itself if the page has not.
 
 ## Commands
 

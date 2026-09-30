@@ -36,6 +36,19 @@ describe('permission page', () => {
     assert.equal($('allow').disabled, true);
   });
 
+  it('moves focus to the status before disabling the focused Allow button', async () => {
+    const media = { calls: [], error: new Error('first try blocked') };
+    const { $ } = await load(media);
+    $('allow').focus();
+    assert.equal(globalThis.document.activeElement, $('allow'));
+    delete media.error;
+    $('allow').click();
+    await settle();
+    assert.equal(globalThis.document.activeElement, $('status'), 'focus fell off the disabled button');
+    assert.equal($('status').getAttribute('tabindex'), '-1', 'status made focusable');
+    assert.equal($('allow').disabled, true);
+  });
+
   it('names the error and keeps Allow enabled when blocked', async () => {
     const error = Object.assign(new Error('Permission denied'), { name: 'NotAllowedError' });
     const media = { calls: [], error };

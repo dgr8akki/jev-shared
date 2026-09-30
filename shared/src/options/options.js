@@ -7,14 +7,18 @@
  * key-form (with radios named `provider`), api-key, cancel, connected, test,
  * replace, remove, key-status, connected-status, steps, host, provider-label,
  * masked. Optional: kicker (gets Welcome / Replace your key / Settings).
- * `<body data-next="…">` is appended to "Key works." after connecting, and
+ * `<body data-next="…">` is appended to "Key works." after connecting,
+ * `<body data-app="…">` (else the page title) labels console errors, and
  * `body[data-state]` is welcome, replace or connected for CSS to hook into.
  * Status lines get `data-tone` (busy, ok, error, neutral); a page can either
  * style the tone in CSS alone or provide `<template data-icon="ok">` elements
  * whose content is cloned in front of the text, so no status relies on colour.
+ * Focus moves with the UI: to Test after Connect, back to the key field after
+ * a failed check, to Replace after Cancel and to the key field after Remove,
+ * so keyboard users are never left on <body>.
  */
 
-import { DEFAULT_PROVIDER, PROVIDERS, createJevClient, maskKey } from '../lib/jev.js';
+import { DEFAULT_PROVIDER, JevError, PROVIDERS, createJevClient, maskKey } from '../lib/jev.js';
 
 /** Outbound links carry a ↗ mark and a hidden "(opens in a new tab)". Trusted constants, so innerHTML is fine. */
 const EXTERNAL =
@@ -42,6 +46,9 @@ const radios = [...form.elements.provider];
 
 /** The page's own mark for a tone, if it provides one. */
 const icon = (tone) => document.querySelector(`template[data-icon="${tone}"]`)?.content.cloneNode(true);
+
+const APP = document.body.dataset.app || document.title;
+const BUSY_MESSAGE = 'Key accepted; the provider is busy right now.';
 
 let { apiKey = '', provider = DEFAULT_PROVIDER } = await chrome.storage.local.get(['apiKey', 'provider']);
 if (!PROVIDERS[provider]) provider = DEFAULT_PROVIDER;
@@ -90,20 +97,43 @@ input.addEventListener('input', () => {
   }
 });
 
-/** Resolves with an error message, or '' when the key works. */
+/**
+ * Checks a key with one throwaway question.
+ *
+ * @returns {Promise<{ ok: true, busy: boolean } | { ok: false, message: string, invalid: boolean }>}
+ *   `busy`: a rate limit, which means the provider checked the key before counting the request.
+ *   `invalid`: whether the key itself is what is wrong; offline, a garbled reply or a 5xx say nothing about it.
+ */
 async function test(id, key) {
+  const { host } = PROVIDERS[id];
   try {
-    await createJevClient({ getKey: () => key, getProvider: () => id }).evaluate({
+    const answers = await createJevClient({ getKey: () => key, getProvider: () => id }).evaluate({
       state: 'ping',
       questions: {
         ok: { type: 'choice', instructions: 'Is this a test message?', criteria: { yes: 'Yes', no: 'No' } },
       },
     });
-    return '';
+    // The client checks that every question got an answer; a key check also needs that answer to be a pick.
+    if (typeof answers.ok?.choice !== 'string') {
+      return { ok: false, message: `Unexpected reply from ${host}.`, invalid: false };
+    }
+    return { ok: true, busy: false };
   } catch (error) {
-    // A busy provider still accepted the key.
-    return error.busy ? '' : error.message;
+    if (!(error instanceof JevError)) {
+      // Our bug, not a provider verdict: log it so it can be diagnosed, and say so plainly.
+      console.error(`${APP}: key check failed`, error);
+      return { ok: false, message: 'Something went wrong while checking the key. Try again.', invalid: false };
+    }
+    if (error.busy) return { ok: true, busy: true };
+    // 401 covers TypeSafe's 403 authentication_error too (the client maps it); a plain 403 is still a verdict.
+    return { ok: false, message: error.message, invalid: error.status === 401 || error.status === 403 };
   }
+}
+
+/** Shows a passing result: "Key works." plus the page's next step (Connect only), or the busy note. */
+function showPass(el, { busy }, next = '') {
+  if (busy) return setStatus(el, BUSY_MESSAGE, 'neutral');
+  setStatus(el, ['Key works.', next].filter(Boolean).join(' '), 'ok');
 }
 
 /** @param {'busy' | 'ok' | 'error' | 'neutral'} [tone] */
@@ -134,27 +164,31 @@ form.addEventListener('submit', async (event) => {
   input.readOnly = true;
   setBusy(submit, true, 'Checking…');
   setStatus(formStatus, `Checking key with ${PROVIDERS[id].label}…`, 'busy');
-  const error = await test(id, key);
+  const result = await test(id, key);
   input.readOnly = false;
   setBusy(submit, false, 'Connect');
-  if (error) {
-    setInvalid(true);
-    return setStatus(formStatus, error, 'error');
+  if (!result.ok) {
+    setInvalid(result.invalid);
+    setStatus(formStatus, result.message, 'error');
+    // Disabling the focused Connect button dropped focus on body; the field is what the user has to fix.
+    return input.focus({ preventScroll: true });
   }
   apiKey = key;
   provider = id;
   await chrome.storage.local.set({ apiKey, provider });
   setStatus(formStatus, '');
   render();
-  setStatus(connectedStatus, ['Key works.', document.body.dataset.next].filter(Boolean).join(' '), 'ok');
+  testButton.focus(); // the form just went away under the submit button; keep keyboard users on the card
+  showPass(connectedStatus, result, document.body.dataset.next);
 });
 
 testButton.addEventListener('click', async () => {
   setBusy(testButton, true, 'Test');
   setStatus(connectedStatus, 'Checking key…', 'busy');
-  const error = await test(provider, apiKey);
+  const result = await test(provider, apiKey);
   setBusy(testButton, false, 'Test');
-  setStatus(connectedStatus, error || 'Key works.', error ? 'error' : 'ok');
+  if (result.ok) showPass(connectedStatus, result);
+  else setStatus(connectedStatus, result.message, 'error');
 });
 
 $('replace').addEventListener('click', () => {
@@ -164,6 +198,7 @@ $('replace').addEventListener('click', () => {
 cancel.addEventListener('click', () => {
   setStatus(formStatus, '');
   render();
+  $('replace').focus(); // back where the edit began
 });
 
 $('remove').addEventListener('click', async () => {
