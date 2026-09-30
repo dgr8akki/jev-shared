@@ -1,22 +1,7 @@
-/**
- * Settings page, opened on install: picks the Jev provider and connects its
- * key. A saved key is never put back into the input; it shows as a masked
- * chip with Test, Replace and Remove.
- *
- * The page supplies the look, this file the behaviour. It expects these ids:
- * key-form (with radios named `provider`), api-key, cancel, connected, test,
- * replace, remove, key-status, connected-status, steps, host, provider-label,
- * masked. Optional: kicker (gets Welcome / Replace your key / Settings).
- * `<body data-next="…">` is appended to "Key works." after connecting,
- * `<body data-app="…">` (else the page title) labels console errors, and
- * `body[data-state]` is welcome, replace or connected for CSS to hook into.
- * Status lines get `data-tone` (busy, ok, error, neutral); a page can either
- * style the tone in CSS alone or provide `<template data-icon="ok">` elements
- * whose content is cloned in front of the text, so no status relies on colour.
- * Focus moves with the UI: to Test after Connect, back to the key field after
- * a failed check, to Replace after Cancel and to the key field after Remove,
- * so keyboard users are never left on <body>.
- */
+// Settings page, opened on install: picks the Jev provider and connects its key. A saved key is never put
+// back into the input; it shows masked with Test, Replace and Remove. The page supplies the markup and look
+// (ids, body data-next / data-app, data-tone styling or <template data-icon> marks): SHARED.md in
+// dgr8akki/jev-shared lists that contract.
 
 import { DEFAULT_PROVIDER, JevError, PROVIDERS, createJevClient, maskKey } from '../lib/jev.js';
 

@@ -55,7 +55,7 @@ describe('createJevClient', () => {
     });
     await assert.rejects(client([rejected], { provider: 'typesafe' }).jev.evaluate(body), {
       status: 401,
-      message: /key was rejected/,
+      message: 'api.typesafe.ai rejected this API key. Check it in settings.',
     });
     await assert.rejects(client([response(402, {})], { provider: 'typesafe' }).jev.evaluate(body), {
       message: PROVIDERS.typesafe.budgetMessage,
@@ -256,7 +256,10 @@ describe('createJevClient', () => {
   });
 
   it('explains rejected keys and exhausted budgets', async () => {
-    await assert.rejects(client([response(401, {})]).jev.evaluate(body), { message: /key was rejected/ });
+    await assert.rejects(client([response(401, {})]).jev.evaluate(body), {
+      status: 401,
+      message: 'ai-gateway.vercel.sh rejected this API key. Check it in settings.',
+    });
     await assert.rejects(client([response(402, {})]).jev.evaluate(body), { message: /budget is used up/ });
   });
 

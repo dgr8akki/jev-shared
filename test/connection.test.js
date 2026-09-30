@@ -52,6 +52,16 @@ describe('mountConnection', () => {
     assert.deepEqual([...button.classList], ['btn', 'ghost']);
   });
 
+  it('lets the page phrase the connected line, given the provider', async () => {
+    const { text, mounted } = mount(
+      { apiKey: 'vck_abcdefghijklmnop1234', provider: 'typesafe' },
+      { connectedText: (provider) => `${provider.label} key saved (${provider.host}) ` },
+    );
+    assert.equal(await mounted, true);
+    assert.equal(text.textContent, 'TypeSafe key saved (api.typesafe.ai) vck_…1234');
+    assert.equal(text.querySelector('.mono').textContent, 'vck_…1234', 'masked key still in its own span');
+  });
+
   it('works with no options at all', async () => {
     const { mounted } = mount({});
     assert.equal(await mounted, false);

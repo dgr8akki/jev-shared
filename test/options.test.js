@@ -140,7 +140,7 @@ describe('options page', () => {
     const ctx = await load({ replies: [{ status: 401, body: {} }] });
     const { $, window } = ctx;
     await submit(ctx, 'vck_abcdefghijklmnop1234');
-    assert.match($('key-status').textContent, /key was rejected/);
+    assert.match($('key-status').textContent, /rejected this API key/);
     $('api-key').dispatchEvent(new window.Event('input'));
     assert.equal($('api-key').getAttribute('aria-invalid'), 'false');
     assert.equal($('key-status').textContent, '');
@@ -209,7 +209,7 @@ describe('options page', () => {
 
   it('marks the input invalid only when the provider rejected the key', async () => {
     const cases = [
-      [{ status: 401, body: {} }, 'true', /key was rejected/],
+      [{ status: 401, body: {} }, 'true', /rejected this API key/],
       [{ status: 403, body: { error: { message: 'Add a credit card to use AI Gateway.' } } }, 'true', /credit card/],
       [new TypeError('Failed to fetch'), 'false', /Can't reach ai-gateway\.vercel\.sh/],
       [{ status: 503, body: {} }, 'false', /HTTP 503/],

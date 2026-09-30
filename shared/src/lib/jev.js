@@ -1,19 +1,7 @@
-/**
- * Minimal client for Jev, TypeSafe's System One decision model, called either
- * directly through TypeSafe's API or through Vercel AI Gateway. Both take the
- * same `{ model, state, questions }` body and return `{ answers }`.
- *
- * Jev never generates text: it answers typed questions (choice, score, boolean)
- * with probabilities. Everything the extension acts on is picked from lists
- * that our own code builds.
- *
- * A 429 pauses the client until Retry-After. By default that pause lives in
- * memory, which a service-worker restart forgets; pass `pauseStore` (see
- * `sessionPauseStore`) to keep it in `chrome.storage.session` instead, so the
- * next command after a restart still waits out the backoff.
- *
- * @module lib/jev
- */
+// Client for Jev, TypeSafe's System One decision model, reached directly or through Vercel AI Gateway.
+// Both take the same { model, state, questions } body and return { answers }. Jev never generates text:
+// it answers typed questions (choice, score, boolean) with probabilities, so everything an extension
+// acts on is picked from lists our own code builds. Worker contract (pauseStore): SHARED.md in dgr8akki/jev-shared.
 
 /**
  * @typedef {'vercel' | 'typesafe'} ProviderId
@@ -240,7 +228,7 @@ export function createJevClient({
     }
     // Vercel rejects keys with 401; TypeSafe with 403 and an authentication_error.
     if (res.status === 401 || json.detail?.error_type === 'authentication_error') {
-      throw new JevError('Your API key was rejected. Check it in settings.', { status: 401 });
+      throw new JevError(`${provider.host} rejected this API key. Check it in settings.`, { status: 401 });
     }
     if (res.status === 402) throw new JevError(provider.budgetMessage, { status: 402 });
     const message =

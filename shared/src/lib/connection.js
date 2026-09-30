@@ -1,9 +1,5 @@
-/**
- * The small "Connected via … / Connect Jev" row shown in the popup or side
- * panel. The key itself is entered on the settings page, never here.
- *
- * @module lib/connection
- */
+// The "Connected via … / Connect Jev" row in a popup or side panel. The key itself is entered on the
+// settings page, never here. Page contract: SHARED.md in dgr8akki/jev-shared.
 
 import { DEFAULT_PROVIDER, PROVIDERS, maskKey } from './jev.js';
 
@@ -25,18 +21,25 @@ export async function getConnection() {
  * @param {(connected: boolean) => void} [options.onChange]
  * @param {string} [options.primaryClass] Class for the "Connect Jev" state.
  * @param {string} [options.secondaryClass] Class for the "Change" state.
+ * @param {(provider: import('./jev.js').Provider) => string} [options.connectedText]
+ *   Wording before the masked key once connected; defaults to "Connected via <label>".
  * @returns {Promise<boolean>} Whether a key is saved.
  */
 export async function mountConnection(
   text,
   button,
-  { onChange = () => {}, primaryClass = 'btn-primary', secondaryClass = 'btn-secondary' } = {},
+  {
+    onChange = () => {},
+    primaryClass = 'btn-primary',
+    secondaryClass = 'btn-secondary',
+    connectedText = (provider) => `Connected via ${provider.label}`,
+  } = {},
 ) {
   async function render() {
     const { apiKey, provider } = await getConnection();
     if (apiKey) {
       const key = Object.assign(document.createElement('span'), { className: 'mono', textContent: maskKey(apiKey) });
-      text.replaceChildren(`Connected via ${PROVIDERS[provider].label}`, key);
+      text.replaceChildren(connectedText(PROVIDERS[provider]), key);
     } else {
       text.textContent = 'Connect a TypeSafe or Vercel AI Gateway key to start.';
     }
