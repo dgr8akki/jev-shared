@@ -1,0 +1,27 @@
+# Drift check for files copied from https://github.com/dgr8akki/jev-shared.
+# Copy to .github/workflows/shared-drift.yml, or move the job into ci.yml.
+# It reads SHARED.md, fetches each listed file at the pinned commit and fails
+# naming every local copy that differs. No npm install: the script has no
+# dependencies.
+name: Shared files
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  shared-drift:
+    name: Shared files match upstream
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - run: node scripts/sync-shared.js --check

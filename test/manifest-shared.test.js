@@ -75,21 +75,27 @@ describe('sharedManifestChecks', () => {
     );
   });
 
-  it('fails an unguarded setAccessLevel call when Chrome 116 is still supported', () => {
+  it('only accepts setAccessLevel inside a try block when Chrome 116 is still supported', () => {
     const name = 'guards setAccessLevel on Chrome versions that lack it';
-    const unguarded = "chrome.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' });\n";
-    assert.throws(run(extension({ background: `// sw\n${unguarded}` }), name), /background\.js:2/);
+    const call = "chrome.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' });\n";
+    const optional = "chrome.storage.local.setAccessLevel?.({ accessLevel: 'TRUSTED_CONTEXTS' });\n";
 
-    run(
-      extension({ background: `chrome.storage.local.setAccessLevel?.({ accessLevel: 'TRUSTED_CONTEXTS' });` }),
-      name,
-    )();
-    run(extension({ background: `if (chrome.storage.local.setAccessLevel) {\n  ${unguarded}}` }), name)();
-    run(
-      extension({ background: `if (typeof chrome.storage.local.setAccessLevel === 'function') ${unguarded}` }),
-      name,
-    )();
-    run(extension({ background: unguarded, manifest: { minimum_chrome_version: '140' } }), name)();
+    // Bare call, and the guards that look safe but are not: on 116-139 the method exists and throws.
+    assert.throws(run(extension({ background: `// sw\n${call}` }), name), /background\.js:2/);
+    assert.throws(run(extension({ background: `// sw\n// note\n${optional}` }), name), /background\.js:3/);
+    assert.throws(run(extension({ background: `if (chrome.storage.local.setAccessLevel) {\n  ${call}}` }), name), /:2/);
+    assert.throws(
+      run(extension({ background: `if (typeof chrome.storage.local.setAccessLevel === 'function') ${call}` }), name),
+    );
+
+    // A try block is the only thing that stops a synchronous throw from killing the worker.
+    run(extension({ background: `try {\n  ${call}} catch {\n  // Chrome < 140\n}\n` }), name)();
+    run(extension({ background: `try {\n  ${optional}} catch (error) {\n  console.debug(error);\n}\n` }), name)();
+    run(extension({ background: `try {\n  ${call}} finally {\n  setup();\n}\n` }), name)();
+    // A try block elsewhere does not cover a call outside it.
+    assert.throws(run(extension({ background: `try {\n  setup();\n} catch {}\n${call}` }), name), /:4/);
+
+    run(extension({ background: call, manifest: { minimum_chrome_version: '140' } }), name)();
     run(extension({ background: '' }), name)();
   });
 });

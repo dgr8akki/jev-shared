@@ -12,7 +12,12 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { it } from 'node:test';
 
-/** Chrome added storage.setAccessLevel to the service worker in 140; earlier versions throw on the bare call. */
+/**
+ * storage.local.setAccessLevel is usable from a service worker since Chrome 140.
+ * On 116-139 the method exists but throws synchronously for that area, so
+ * neither `?.()` nor a typeof check helps: a throw at the top of the worker
+ * stops every listener below it from registering. Only a try block counts.
+ */
 const SET_ACCESS_LEVEL_SINCE = 140;
 const STORE_DESCRIPTION_LIMIT = 132;
 
@@ -61,18 +66,22 @@ export function sharedManifestChecks(root) {
         const worker = manifest.background?.service_worker;
         if (!worker || Number(manifest.minimum_chrome_version) >= SET_ACCESS_LEVEL_SINCE) return;
         const source = readFileSync(new URL(worker, src), 'utf8');
-        // A guard anywhere in the file: `if (x.setAccessLevel)`, `typeof x.setAccessLevel`, `'setAccessLevel' in x`.
-        const guarded =
-          /typeof\s+[\w.]*setAccessLevel|['"]setAccessLevel['"]\s+in\s|if\s*\([^)]*setAccessLevel\b[^(]/.test(source);
-        const bare = source
+        const call = /\bsetAccessLevel(\?\.)?\(/;
+        // Blank out try blocks (keeping line breaks so line numbers still point into the original file),
+        // then any call left is one nothing catches.
+        const outsideTry = source.replace(/try\s*\{[\s\S]*?\}\s*(?=catch\b|finally\b)/g, (block) =>
+          block.replace(/[^\n]/g, ' '),
+        );
+        const lines = outsideTry
           .split('\n')
-          .map((line, i) => (/\bsetAccessLevel\(/.test(line) ? `${worker}:${i + 1}` : null))
+          .map((line, i) => (call.test(line) ? `${worker}:${i + 1}` : null))
           .filter(Boolean);
-        assert.ok(
-          guarded || bare.length === 0,
-          `setAccessLevel is called without a guard at ${bare.join(', ')}, but minimum_chrome_version is ` +
-            `${manifest.minimum_chrome_version} and Chrome < ${SET_ACCESS_LEVEL_SINCE} has no such function. ` +
-            'Use `chrome.storage.local.setAccessLevel?.(…)`.',
+        assert.equal(
+          lines.length,
+          0,
+          `setAccessLevel is called outside a try block at ${lines.join(', ')}, but minimum_chrome_version is ` +
+            `${manifest.minimum_chrome_version}: Chrome < ${SET_ACCESS_LEVEL_SINCE} throws on that call and the ` +
+            'worker dies before its listeners register. Wrap it in try { … } catch {}.',
         );
       },
     },
