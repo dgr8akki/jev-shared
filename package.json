@@ -1,0 +1,32 @@
+{
+  "name": "jev-shared",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Source of the files shared by the Jev Chrome extensions (jev-voice, slop-radar, recipe-mode, intent-guard).",
+  "type": "module",
+  "license": "MIT",
+  "author": "Aakash Pahuja",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dgr8akki/jev-shared.git"
+  },
+  "bugs": "https://github.com/dgr8akki/jev-shared/issues",
+  "homepage": "https://github.com/dgr8akki/jev-shared#readme",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test shared/test/*.test.js test/*.test.js",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "npm run lint && npm run format:check && npm test"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.11.0",
+    "globals": "^17.12.0",
+    "jsdom": "^30.1.1",
+    "prettier": "^3.9.9"
+  }
+}
