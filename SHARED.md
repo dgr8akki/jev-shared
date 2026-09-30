@@ -24,17 +24,33 @@ These files are copied from [jev-shared](https://github.com/dgr8akki/jev-shared)
 - Upstream: https://github.com/dgr8akki/jev-shared
 - Commit: `0000000000000000000000000000000000000000`
 
-| Upstream path                    | Local path                | Note                                            |
-| -------------------------------- | ------------------------- | ----------------------------------------------- |
-| `shared/src/lib/jev.js`          | `src/lib/jev.js`          |                                                 |
-| `shared/src/lib/connection.js`   | `src/lib/connection.js`   | mounted with `{ primaryClass, secondaryClass }` |
-| `shared/src/options/options.js`  | `src/options/options.js`  | page contract below                             |
-| `shared/test/jev.test.js`        | `test/jev.test.js`        |                                                 |
-| `shared/test/helpers.js`         | `test/helpers.js`         |                                                 |
-| `shared/test/manifest-shared.js` | `test/manifest-shared.js` |                                                 |
-| `shared/scripts/render-icons.js` | `scripts/render-icons.js` |                                                 |
-| `scripts/sync-shared.js`         | `scripts/sync-shared.js`  | keeps itself in sync                            |
+| Upstream path                    | Local path                | Note                                                                  |
+| -------------------------------- | ------------------------- | --------------------------------------------------------------------- |
+| `shared/src/lib/jev.js`          | `src/lib/jev.js`          | worker passes `pauseStore: sessionPauseStore(chrome.storage.session)` |
+| `shared/src/lib/connection.js`   | `src/lib/connection.js`   | mounted with `{ primaryClass, secondaryClass }`                       |
+| `shared/src/options/options.js`  | `src/options/options.js`  | page contract below                                                   |
+| `shared/test/jev.test.js`        | `test/jev.test.js`        |                                                                       |
+| `shared/test/helpers.js`         | `test/helpers.js`         |                                                                       |
+| `shared/test/manifest-shared.js` | `test/manifest-shared.js` |                                                                       |
+| `shared/scripts/render-icons.js` | `scripts/render-icons.js` |                                                                       |
+| `scripts/sync-shared.js`         | `scripts/sync-shared.js`  | keeps itself in sync                                                  |
 ```
+
+## What `jev.js` needs from its worker
+
+Nothing to run, but the 429 pause is kept in module memory unless told otherwise, and a service-worker restart forgets it. Each worker should create its client with the session store so the next command after a restart still waits out the backoff:
+
+```js
+import { createJevClient, sessionPauseStore } from './lib/jev.js';
+
+const jev = createJevClient({
+  getKey: async () => (await chrome.storage.local.get('apiKey')).apiKey ?? '',
+  getProvider: async () => (await chrome.storage.local.get('provider')).provider,
+  pauseStore: sessionPauseStore(chrome.storage.session),
+});
+```
+
+The key is `jev:pausedUntil` (pass a second argument to change it). Pages that create a throwaway client for a key check, like `options.js`, can leave `pauseStore` out.
 
 ## What `options.js` needs from its page
 
@@ -65,14 +81,21 @@ node scripts/sync-shared.js
 # Exit 1 and name every copy that differs from the pinned commit. This is the CI step.
 node scripts/sync-shared.js --check
 
-# Read from a local clone instead of GitHub (also works offline).
+# Read from a local clone instead of GitHub (also works offline, and needs no token).
 node scripts/sync-shared.js main --from ../jev-shared
 JEV_SHARED_DIR=../jev-shared node scripts/sync-shared.js --check
+
+# While jev-shared is private, GitHub reads need a token that can see it (JEV_SHARED_TOKEN or GITHUB_TOKEN).
+JEV_SHARED_TOKEN=<token> node scripts/sync-shared.js --check
 ```
+
+Without a token the script uses raw.githubusercontent.com. With one it sends `Authorization: Bearer` and reads files through the GitHub contents API (`Accept: application/vnd.github.raw+json`), because raw.githubusercontent.com does not take tokens reliably. A 404 with no token ends with a one-line hint about `JEV_SHARED_TOKEN`.
 
 ## The CI drift check
 
-`templates/consumer-ci-drift.yml` is a complete workflow. Copy it to `.github/workflows/shared-drift.yml`, or move its one job into the existing `ci.yml`. It checks the repo out, sets up Node 22 and runs `node scripts/sync-shared.js --check`, which prints one `drift: <local path> differs from <upstream path>` line per file (or `is missing`) and exits 1. An unmodified checkout prints `N shared files match … @ <sha>` and exits 0. There is no `npm ci` step because the script has no dependencies; if the job is merged into `ci.yml` after `npm ci`, that is fine too.
+`templates/consumer-ci-drift.yml` is the consumers' CI job with one step appended: `node scripts/sync-shared.js --check`. Copy the file over `.github/workflows/ci.yml`, or add just that step to the existing check job. It goes after `npm test` on purpose: a drift failure must never hide lint or test results, which it did when it ran first and 404ed. The step prints one `drift: <local path> differs from <upstream path>` line per file (or `is missing`) and exits 1; an unmodified checkout prints `N shared files match … @ <sha>` and exits 0.
+
+While jev-shared is private the step needs `JEV_SHARED_TOKEN`, a repository secret holding a GitHub token that can read jev-shared (a fine-grained token with contents read on that one repo is enough). The template also sets `continue-on-error: true` so a missing secret does not fail every build; remove that line once the shared repo is public and the token is no longer needed.
 
 ## When a copy has to differ
 

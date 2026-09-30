@@ -26,11 +26,11 @@ node scripts/sync-shared.js           # restore the copies at the pinned commit
 node scripts/sync-shared.js --check   # exit 1 and name each copy that differs
 ```
 
-Files are fetched from raw.githubusercontent.com at the pinned commit. Pass `--from ../jev-shared` (or set `JEV_SHARED_DIR`) to read from a local clone with `git show` instead, which works offline. Node 22, no dependencies.
+Files are fetched from GitHub at the pinned commit; while this repo is private that needs `JEV_SHARED_TOKEN` (or `GITHUB_TOKEN`) in the environment. Pass `--from ../jev-shared` (or set `JEV_SHARED_DIR`) to read from a local clone with `git show` instead, which works offline and needs no token. Node 22, no dependencies.
 
 ## The drift check
 
-Each consumer's CI runs `node scripts/sync-shared.js --check`. The script reads `SHARED.md`, fetches each listed file at the pinned commit, and compares bytes. Any difference prints `drift: src/lib/jev.js differs from shared/src/lib/jev.js` and fails the job, so a local edit to a shared file is caught at pull request time rather than found weeks later by diffing repos. `templates/consumer-ci-drift.yml` is the workflow to copy.
+Each consumer's CI runs `node scripts/sync-shared.js --check` as the last step, after lint and tests. The script reads `SHARED.md`, fetches each listed file at the pinned commit, and compares bytes. Any difference prints `drift: src/lib/jev.js differs from shared/src/lib/jev.js` and fails the step, so a local edit to a shared file is caught at pull request time rather than found weeks later by diffing repos. `templates/consumer-ci-drift.yml` is the job to copy.
 
 To change a shared file: change it here with a test, push, then run the sync in each consumer and commit the result there.
 

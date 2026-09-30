@@ -117,9 +117,10 @@ describe('run <ref>', () => {
     const root = consumer({ commit: 'TODO', copy: false });
     const { lines, options } = io(root);
     assert.equal(await run(['HEAD', '--from', repo], options), 0);
+    // Compare with the committed file, not the working tree, so an uncommitted edit here does not fail this test.
     assert.equal(
       readFileSync(join(root, 'src/lib/jev.js'), 'utf8'),
-      readFileSync(join(repo, 'shared/src/lib/jev.js'), 'utf8'),
+      execFileSync('git', ['-C', repo, 'show', `${head}:shared/src/lib/jev.js`]).toString(),
     );
     assert.equal(parseShared(readFileSync(join(root, 'SHARED.md'), 'utf8')).commit, head);
     assert.ok(lines.includes(`pinned SHARED.md to ${head.slice(0, 7)}`));
@@ -162,5 +163,82 @@ describe('createSource over GitHub', () => {
     assert.equal((await source.read(head, 'shared/src/lib/jev.js')).toString(), 'bytes');
     await assert.rejects(source.read(head, 'missing.js'), /HTTP 404/);
     assert.throws(() => createSource({ upstream: 'https://github.com/', fetchImpl }), /owner\/repo/);
+  });
+});
+
+describe('createSource with a token (private upstream)', () => {
+  const upstream = 'https://github.com/dgr8akki/jev-shared';
+  /** Records requests; answers the contents API, the commits API and raw files. */
+  function github() {
+    const calls = [];
+    const fetchImpl = async (url, init = {}) => {
+      calls.push({ url, headers: init.headers ?? {} });
+      if (url.startsWith('https://api.github.com/repos/dgr8akki/jev-shared/commits/main'))
+        return new Response(`${head}\n`);
+      if (url === `https://api.github.com/repos/dgr8akki/jev-shared/contents/shared/src/lib/jev.js?ref=${head}`) {
+        return new Response('api bytes');
+      }
+      if (url === `https://raw.githubusercontent.com/dgr8akki/jev-shared/${head}/shared/src/lib/jev.js`) {
+        return new Response('raw bytes');
+      }
+      return new Response('nope', { status: 404 });
+    };
+    return { calls, fetchImpl };
+  }
+
+  it('reads through the contents API with a bearer token and the raw media type', async () => {
+    const { calls, fetchImpl } = github();
+    const source = createSource({ upstream, fetchImpl, token: 'tok' });
+    assert.equal((await source.read(head, 'shared/src/lib/jev.js')).toString(), 'api bytes');
+    assert.equal(calls.at(-1).headers.Authorization, 'Bearer tok');
+    assert.equal(calls.at(-1).headers.Accept, 'application/vnd.github.raw+json');
+    assert.equal(await source.resolve('main'), head);
+    assert.equal(calls.at(-1).headers.Authorization, 'Bearer tok');
+  });
+
+  it('stays on raw.githubusercontent.com with no Authorization header when there is no token', async () => {
+    const { calls, fetchImpl } = github();
+    const source = createSource({ upstream, fetchImpl });
+    assert.equal((await source.read(head, 'shared/src/lib/jev.js')).toString(), 'raw bytes');
+    assert.equal(calls.at(-1).headers.Authorization, undefined);
+    await source.resolve('main');
+    assert.equal(calls.at(-1).headers.Authorization, undefined);
+  });
+
+  it('hints at JEV_SHARED_TOKEN on a 404 without a token, and not with one', async () => {
+    const { fetchImpl } = github();
+    await assert.rejects(createSource({ upstream, fetchImpl }).read(head, 'missing.js'), (error) => {
+      assert.match(error.message, /HTTP 404/);
+      assert.match(error.message, /private.*JEV_SHARED_TOKEN/i);
+      return true;
+    });
+    await assert.rejects(createSource({ upstream, fetchImpl, token: 'tok' }).read(head, 'missing.js'), (error) => {
+      assert.match(error.message, /HTTP 404/);
+      assert.doesNotMatch(error.message, /JEV_SHARED_TOKEN/);
+      return true;
+    });
+  });
+
+  it('run() takes the token from JEV_SHARED_TOKEN, then GITHUB_TOKEN', async () => {
+    for (const [env, expected] of [
+      [{ JEV_SHARED_TOKEN: 'a', GITHUB_TOKEN: 'b' }, 'Bearer a'],
+      [{ GITHUB_TOKEN: 'b' }, 'Bearer b'],
+      [{}, undefined],
+    ]) {
+      const root = consumer({ copy: true });
+      const calls = [];
+      const fetchImpl = async (url, init = {}) => {
+        calls.push(init.headers ?? {});
+        const path = url.includes('/contents/') ? url.split('/contents/')[1].split('?')[0] : url.split(`${head}/`)[1];
+        return new Response(execFileSync('git', ['-C', repo, 'show', `${head}:${path}`]));
+      };
+      const { options } = io(root, env);
+      assert.equal(await run(['--check'], { ...options, fetchImpl }), 0, JSON.stringify(env));
+      assert.equal(calls.length, 2);
+      assert.ok(
+        calls.every((h) => h.Authorization === expected),
+        `${JSON.stringify(env)} -> ${JSON.stringify(calls)}`,
+      );
+    }
   });
 });

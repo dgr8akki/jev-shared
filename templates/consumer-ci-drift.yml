@@ -1,9 +1,10 @@
 # Drift check for files copied from https://github.com/dgr8akki/jev-shared.
-# Copy to .github/workflows/shared-drift.yml, or move the job into ci.yml.
-# It reads SHARED.md, fetches each listed file at the pinned commit and fails
-# naming every local copy that differs. No npm install: the script has no
-# dependencies.
-name: Shared files
+# This is the consumers' CI job with the drift step appended. Either copy the
+# file over .github/workflows/ci.yml or add the last step to your own check
+# job after `npm test`: it runs last so a drift failure never hides lint or
+# test results. The step reads SHARED.md, fetches each listed file at the
+# pinned commit and fails naming every local copy that differs.
+name: CI
 
 on:
   push:
@@ -14,8 +15,8 @@ permissions:
   contents: read
 
 jobs:
-  shared-drift:
-    name: Shared files match upstream
+  check:
+    name: Lint, test and check shared files
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -23,5 +24,17 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
+          cache: npm
 
-      - run: node scripts/sync-shared.js --check
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm test
+
+      - name: Shared files match upstream
+        run: node scripts/sync-shared.js --check
+        env:
+          # jev-shared is private for now, so the script needs a token that can read it.
+          JEV_SHARED_TOKEN: ${{ secrets.JEV_SHARED_TOKEN }}
+        # Remove once the shared repo is public: until then a missing secret would fail every build.
+        continue-on-error: true
